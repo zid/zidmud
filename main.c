@@ -1,11 +1,17 @@
+#include <stdio.h>
 #include "server.h"
+
 
 int main(void)
 {
-	int s;
+	int s, port;
 
-	new_server(3333);
-	
+	port = 3333;
+
+	printf("Starting server on port %d...\n", port);
+	new_server(port);
+
+	printf("Exiting.\n");
 	return s;
 }
 
