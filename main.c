@@ -4,12 +4,13 @@
 
 int main(void)
 {
-	int s, port;
+	int s
+	unsigned short port;
 
 	port = 3333;
 
 	printf("Starting server on port %d...\n", port);
-	new_server(port);
+	s = new_server(port);
 
 	printf("Exiting.\n");
 	return s;

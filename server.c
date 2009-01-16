@@ -9,12 +9,12 @@
 
 static int yes = 1;
 
-static int make_socket(int port)
-{	
+static int make_socket(unsigned short port)
+{
 	int r, s;
 	struct addrinfo hints, *serv, *p;
 	char portstr[8];
-	
+
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
