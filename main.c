@@ -4,7 +4,7 @@
 
 int main(void)
 {
-	int s
+	int s;
 	unsigned short port;
 
 	port = 3333;
