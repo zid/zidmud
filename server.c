@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <unistd.h>
 #include "log.h"
 #include "server.h"
 
@@ -11,7 +12,7 @@ static int yes = 1;
 
 static int make_socket(unsigned short port)
 {
-	int r, s;
+	int r, s = 0;
 	struct addrinfo hints, *serv, *p;
 	char portstr[8];
 
@@ -25,8 +26,8 @@ static int make_socket(unsigned short port)
 	r = getaddrinfo(NULL, portstr, &hints, &serv);
 	if(r != 0)
 	{
-		log_warn("getaddinfo: %s\n", gai_strerror(r));
-		return -1;
+		die("getaddinfo: %s\n", gai_strerror(r));
+		return 0;
 	}
 
 	/* Find something we can bind a socket on */
@@ -58,8 +59,10 @@ static int make_socket(unsigned short port)
 	}
 
 	if(p == NULL)
+	{
 		die("Unable to bind a socket to listen on.\n");
-	
+		return 0;
+	}
 	freeaddrinfo(serv);
 
 	return s;
