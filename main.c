@@ -11,7 +11,11 @@ int main(void)
 
 	printf("Starting server on port %d...\n", port);
 	s = new_server(port);
-
+	printf("Server socket: %d\n", s);
+	kek(s);
+	kek(s);
+	kek(s);
+	server_dump_clients();
 	printf("Exiting.\n");
 	return s;
 }

@@ -6,8 +6,23 @@
 #include <errno.h>
 #include "log.h"
 #include "server.h"
+#include "client.h"
 
 static int yes = 1;
+static struct client *clients;
+static struct client *client_head;
+
+void server_dump_clients()
+{
+	struct client *c;
+	
+	for(c = clients; c; c = c->next)
+	{
+		printf("sock: %d, ip: %d\n", c->s, 
+((struct sockaddr_in *)c)->sin_addr.s_addr);
+	}
+
+}
 
 static int make_socket(unsigned short port)
 {
@@ -84,3 +99,29 @@ int new_server(int port)
 	
 	return s;
 }
+
+void server_add_client(int s, struct sockaddr *sock_info)
+{
+	struct client *c;
+
+	printf("New client: %d...\n", s);
+	
+	/* First client ever */
+	if(!client_head) {
+		clients = malloc(sizeof(*clients));
+		c = clients;
+	} else {
+		client_head->next = malloc(sizeof(*clients));
+		c = client_head->next;
+	}
+
+	c->next = NULL;
+	c->s = s;
+	c->sock_info = malloc(sizeof(struct sockaddr));
+	memcpy(c->sock_info, sock_info, sizeof(*sock_info));
+
+	client_head = c;
+
+	printf("\tRegistered.\n");
+}
+
