@@ -1,7 +1,3 @@
-<<<<<<< Updated upstream:Makefile
-mud: server.o main.o log.o
-	gcc server.o main.o log.o -o mud -O2 -W -Wall -Werror
-=======
 CFLAGS:=-O2 -W -Wall
 #CFLAGS+=-Werror
 
@@ -13,5 +9,4 @@ CFLAGS:=-O2 -W -Wall
 
 mud: server.o main.o log.o kek.o
 	$(CC) $(LDFLAGS) $(TARGET_ARCH) -o $@ $(filter %.o,$^)
->>>>>>> Stashed changes:Makefile
 
