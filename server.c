@@ -71,6 +71,7 @@ void server_wait_clients(int s)
 {
 	fd_set fds;
 	struct client *p;
+	int res;
 
 	FD_ZERO(&fds);
 	FD_SET(s, &fds);
@@ -79,23 +80,38 @@ void server_wait_clients(int s)
 	{
 		FD_SET(p->s, &fds);
 	}
-	
+
 	if(highest_fd == 0)
 		highest_fd = s;
 
-	select(highest_fd+1, &fds, NULL, NULL, NULL);
+	res=select(highest_fd+1, &fds, NULL, NULL, NULL);
+	if(res < 0)
+	{
+		if(errno!=EINTR)
+		{
+			/* it is normal for EINTR to happen on signals, anything else is an error. */
+			perror("select()");
+		}
+		return;
+	}
 
 	if(FD_ISSET(s, &fds))
 	{
 		/* Server socket is in the list, accept() it */
 		server_add_client(s);
+		res--;
 	}
 
-	for(p = clients; p != NULL; p = p->next)
+	/* use res to count the number of fds to check */
+
+	for(p = clients; res > 0 && p != NULL; p = p->next)
 	{
 		/* Check for client sockets with data to be read */
 		if(FD_ISSET(p->s, &fds))
+		{
 			server_handle(p->s);
+			res--;
+		}
 	}
 }
 
@@ -107,8 +123,8 @@ void server_dump_clients()
 	for(c = clients; c; c = c->next)
 	{
 		ip = ((struct sockaddr_in *)c->sock_info)->sin_addr.s_addr;
-		
-		printf("sock: %d, ip: %d.%d.%d.%d\n", 
+
+		printf("sock: %d, ip: %d.%d.%d.%d\n",
 			c->s,
 			ip&0xFF,
 			(ip&0xFF00)>>8,
@@ -147,7 +163,7 @@ static int make_socket(unsigned short port)
 			log_warn("socket: %d\n", errno);
 			continue;
 		}
-		
+
 		r = setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 		if(r == -1)
 		{
@@ -161,7 +177,7 @@ static int make_socket(unsigned short port)
 			log_warn("bind: %d\n", errno);
 			close(s);
 			continue;
-			
+
 		}
 		break;	/* Tests passed, Got one! */
 	}
@@ -183,7 +199,7 @@ static void listen_on(int s)
 	r = listen(s, 10);
 	if(r == -1)
 		die("Unable to listen on bound socket.\n");
-	
+
 }
 
 int new_server(int port)
@@ -192,7 +208,7 @@ int new_server(int port)
 
 	s = make_socket(port);
 	listen_on(s);
-	
+
 	return s;
 }
 

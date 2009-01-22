@@ -1,11 +1,20 @@
 #include <stdio.h>
+#include <signal.h>
 #include "server.h"
 
+sig_atomic_t quit; /* set this to non-zero to quit */
+
+/* signal handler that sets the quit flag */
+static void sh_quit(int s) {
+	quit=1;
+}
 
 int main(void)
 {
-	int s, quit = 0;
+	int s;
 	unsigned short port;
+
+	signal(SIGINT, sh_quit);
 
 	port = 3333;
 
