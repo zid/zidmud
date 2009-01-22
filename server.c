@@ -10,9 +10,35 @@
 #include "client.h"
 
 static int yes = 1;
-static struct client *clients;
-static struct client *client_head;
+static struct client *clients = NULL;
+static struct client *client_head = NULL;
 static int highest_fd = 0;
+
+static void server_delete_client(int s)
+{
+	struct client *p, *t;
+
+	/* Special case if the very first entry is the one we want */
+	if(clients->s == s)
+	{
+		t = clients;
+		clients = clients->next;
+		close(s);
+		free(t);
+		return;
+	}
+
+	/* General case, search entry *ahead* of us */
+	for(p = clients; p != NULL; p = p->next)
+	{
+		if(p->next && p->next->s == s)
+		{
+			t = p->next;
+			p->next = p->next->next;
+			free(t);
+		}
+	}
+}
 
 static void server_handle(int s)
 {
@@ -20,10 +46,12 @@ static void server_handle(int s)
 	int l;
 
 	l = recv(s, buf, 512, 0);
-	if(l == 0){
-		/* FIXME: Delete client here */
-		close(s);
+	if(l == 0)
+	{
+		server_delete_client(s);
+		printf("Removed client %d\n", s);
 	}
+
 	buf[l] = 0;
 
 	printf("[%d]: %s\n", s, buf);
@@ -37,6 +65,8 @@ static void server_add_client(int s)
 	unsigned int len;
 
 	new_client = accept(s, &sock_info, &len);
+	if(new_client <= 0)
+		die("Wtf? accept failed.\n");
 
 	printf("New client: %d...\n", new_client);
 	
@@ -65,7 +95,7 @@ static void server_add_client(int s)
 void server_wait_clients(int s)
 {
 	fd_set fds;
-	struct client *p;
+	struct client *p, *t;
 
 	FD_ZERO(&fds);
 	FD_SET(s, &fds);
@@ -86,32 +116,15 @@ void server_wait_clients(int s)
 		server_add_client(s);
 	}
 
-	for(p = clients; p != NULL; p = p->next)
+	for(p = clients; p != NULL; p = t)
 	{
+		/* Store p->next incase the client is removed */
+		t = p->next;
+
 		/* Check for client sockets with data to be read */
 		if(FD_ISSET(p->s, &fds))
 			server_handle(p->s);
 	}
-}
-
-void server_dump_clients()
-{
-	struct client *c;
-	int ip;
-
-	for(c = clients; c; c = c->next)
-	{
-		ip = ((struct sockaddr_in *)c->sock_info)->sin_addr.s_addr;
-		
-		printf("sock: %d, ip: %d.%d.%d.%d\n", 
-			c->s,
-			ip&0xFF,
-			(ip&0xFF00)>>8,
-			(ip&0xFF0000)>>16,
-			(ip&0xFF000000)>>24
-		);
-	}
-
 }
 
 static int make_socket(unsigned short port)
@@ -190,4 +203,3 @@ int new_server(int port)
 	
 	return s;
 }
-
