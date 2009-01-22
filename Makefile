@@ -7,6 +7,6 @@ CFLAGS:=-O2 -W -Wall
 % : %.o
 	$(CC) $(LDFLAGS) $(TARGET_ARCH) -o $@ $(filter %.o,$^)
 
-mud: server.o main.o log.o kek.o
+mud: server.o main.o log.o
 	$(CC) $(LDFLAGS) $(TARGET_ARCH) -o $@ $(filter %.o,$^)
 
