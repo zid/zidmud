@@ -1,4 +1,4 @@
-CFLAGS:=-O2 -W -Wall
+CFLAGS:=-O2 -W -Wall -g
 #CFLAGS+=-Werror
 
 %.o : %.c
