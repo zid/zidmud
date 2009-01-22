@@ -18,4 +18,3 @@ log.o: log.c log.h
 
 clean:
 	$(RM) *.o mud
-

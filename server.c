@@ -7,8 +7,112 @@
 #include <unistd.h>
 #include "log.h"
 #include "server.h"
+#include "client.h"
 
 static int yes = 1;
+static struct client *clients;
+static struct client *client_head;
+static int highest_fd = 0;
+
+static void server_handle(int s)
+{
+	char buf[512];
+	int l;
+
+	l = recv(s, buf, 512, 0);
+	if(l == 0){
+		/* FIXME: Delete client here */
+		close(s);
+	}
+	buf[l] = 0;
+
+	printf("[%d]: %s\n", s, buf);
+}
+
+static void server_add_client(int s)
+{
+	struct client *c;
+	struct sockaddr sock_info;
+	int new_client;
+	unsigned int len;
+
+	new_client = accept(s, &sock_info, &len);
+
+	printf("New client: %d...\n", new_client);
+	
+	/* First client ever */
+	if(!client_head) {
+		clients = malloc(sizeof(*clients));
+		c = clients;
+	} else {
+		client_head->next = malloc(sizeof(*clients));
+		c = client_head->next;
+	}
+
+	c->next = NULL;
+	c->s = new_client;
+	c->sock_info = malloc(sizeof(struct sockaddr));
+	memcpy(c->sock_info, &sock_info, sizeof(sock_info));
+
+	client_head = c;
+
+	if(new_client > highest_fd)
+		highest_fd = new_client;
+
+	printf("\tRegistered.\n");
+}
+
+void server_wait_clients(int s)
+{
+	fd_set fds;
+	struct client *p;
+
+	FD_ZERO(&fds);
+	FD_SET(s, &fds);
+
+	for(p = clients; p != NULL; p = p->next)
+	{
+		FD_SET(p->s, &fds);
+	}
+	
+	if(highest_fd == 0)
+		highest_fd = s;
+
+	select(highest_fd+1, &fds, NULL, NULL, NULL);
+
+	if(FD_ISSET(s, &fds))
+	{
+		/* Server socket is in the list, accept() it */
+		server_add_client(s);
+	}
+
+	for(p = clients; p != NULL; p = p->next)
+	{
+		/* Check for client sockets with data to be read */
+		if(FD_ISSET(p->s, &fds))
+			server_handle(p->s);
+	}
+}
+
+void server_dump_clients()
+{
+	struct client *c;
+	int ip;
+
+	for(c = clients; c; c = c->next)
+	{
+		ip = ((struct sockaddr_in *)c->sock_info)->sin_addr.s_addr;
+		
+		printf("sock: %d, ip: %d.%d.%d.%d\n", 
+			c->s,
+			ip&0xFF,
+			(ip&0xFF00)>>8,
+			(ip&0xFF0000)>>16,
+			(ip&0xFF000000)>>24
+		);
+	}
+
+}
 
 static int make_socket(unsigned short port)
 {
@@ -27,7 +131,6 @@ static int make_socket(unsigned short port)
 	if(r != 0)
 	{
 		die("getaddinfo: %s\n", gai_strerror(r));
-		return 0;
 	}
 
 	/* Find something we can bind a socket on */
@@ -61,7 +164,7 @@ static int make_socket(unsigned short port)
 	if(p == NULL)
 	{
 		die("Unable to bind a socket to listen on.\n");
-		return 0;
+		return -1; 	/* make gcc shut up about not using s */
 	}
 	freeaddrinfo(serv);
 
@@ -87,3 +190,4 @@ int new_server(int port)
 	
 	return s;
 }
+
