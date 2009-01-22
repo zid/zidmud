@@ -11,6 +11,9 @@ int main(void)
 
 	printf("Starting server on port %d...\n", port);
 	s = new_server(port);
+	if(s < 0) {
+		return 1;
+	}
 	printf("Server socket: %d\n", s);
 	while(!quit)
 	{
@@ -18,5 +21,5 @@ int main(void)
 	}
 	server_dump_clients();
 	printf("Exiting.\n");
-	return s;
+	return 0;
 }
