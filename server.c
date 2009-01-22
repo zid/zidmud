@@ -50,6 +50,7 @@ static void server_handle(int s)
 	{
 		server_delete_client(s);
 		printf("Removed client %d\n", s);
+		return;
 	}
 
 	buf[l] = 0;
@@ -60,16 +61,18 @@ static void server_handle(int s)
 static void server_add_client(int s)
 {
 	struct client *c;
-	struct sockaddr sock_info;
+	struct sockaddr_storage sock_info;
 	int new_client;
-	unsigned int len;
+	unsigned int len = sizeof sock_info;
 
-	new_client = accept(s, &sock_info, &len);
-	if(new_client <= 0)
-		die("Wtf? accept failed.\n");
+	new_client = accept(s, (struct sockaddr*)&sock_info, &len);
+
+	if(new_client < 0) {
+		die("accept()");
+	}
 
 	printf("New client: %d...\n", new_client);
-	
+
 	/* First client ever */
 	if(!client_head) {
 		clients = malloc(sizeof(*clients));
@@ -81,8 +84,8 @@ static void server_add_client(int s)
 
 	c->next = NULL;
 	c->s = new_client;
-	c->sock_info = malloc(sizeof(struct sockaddr));
-	memcpy(c->sock_info, &sock_info, sizeof(sock_info));
+	c->sock_info = malloc(len);
+	memcpy(c->sock_info, &sock_info, len);
 
 	client_head = c;
 
@@ -96,6 +99,7 @@ void server_wait_clients(int s)
 {
 	fd_set fds;
 	struct client *p, *t;
+	int res;
 
 	FD_ZERO(&fds);
 	FD_SET(s, &fds);
@@ -104,26 +108,40 @@ void server_wait_clients(int s)
 	{
 		FD_SET(p->s, &fds);
 	}
-	
+
 	if(highest_fd == 0)
 		highest_fd = s;
 
-	select(highest_fd+1, &fds, NULL, NULL, NULL);
+	res=select(highest_fd+1, &fds, NULL, NULL, NULL);
+	if(res < 0)
+	{
+		if(errno!=EINTR)
+		{
+			/* it is normal for EINTR to happen on signals, anything else is an error. */
+			perror("select()");
+		}
+		return;
+	}
 
 	if(FD_ISSET(s, &fds))
 	{
 		/* Server socket is in the list, accept() it */
 		server_add_client(s);
+		res--;
 	}
 
-	for(p = clients; p != NULL; p = t)
+	/* use res to count the number of fds to check */
+	for(p = clients; res > 0 && p != NULL; p = t)
 	{
 		/* Store p->next incase the client is removed */
 		t = p->next;
 
 		/* Check for client sockets with data to be read */
 		if(FD_ISSET(p->s, &fds))
+		{
 			server_handle(p->s);
+			res--;
+		}
 	}
 }
 
@@ -155,7 +173,7 @@ static int make_socket(unsigned short port)
 			log_warn("socket: %d\n", errno);
 			continue;
 		}
-		
+
 		r = setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 		if(r == -1)
 		{
@@ -169,7 +187,7 @@ static int make_socket(unsigned short port)
 			log_warn("bind: %d\n", errno);
 			close(s);
 			continue;
-			
+
 		}
 		break;	/* Tests passed, Got one! */
 	}
@@ -191,7 +209,7 @@ static void listen_on(int s)
 	r = listen(s, 10);
 	if(r == -1)
 		die("Unable to listen on bound socket.\n");
-	
+
 }
 
 int new_server(int port)
@@ -200,6 +218,6 @@ int new_server(int port)
 
 	s = make_socket(port);
 	listen_on(s);
-	
+
 	return s;
 }
