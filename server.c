@@ -32,14 +32,19 @@ static void server_handle(int s)
 static void server_add_client(int s)
 {
 	struct client *c;
-	struct sockaddr sock_info;
+	struct sockaddr_storage sock_info;
 	int new_client;
-	unsigned int len;
+	unsigned int len = sizeof sock_info;
 
-	new_client = accept(s, &sock_info, &len);
+	new_client = accept(s, (struct sockaddr*)&sock_info, &len);
+
+	if(new_client < 0) {
+		perror("accept()");
+		return;
+	}
 
 	printf("New client: %d...\n", new_client);
-	
+
 	/* First client ever */
 	if(!client_head) {
 		clients = malloc(sizeof(*clients));
@@ -51,8 +56,8 @@ static void server_add_client(int s)
 
 	c->next = NULL;
 	c->s = new_client;
-	c->sock_info = malloc(sizeof(struct sockaddr));
-	memcpy(c->sock_info, &sock_info, sizeof(sock_info));
+	c->sock_info = malloc(len);
+	memcpy(c->sock_info, &sock_info, len);
 
 	client_head = c;
 
