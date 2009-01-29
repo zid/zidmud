@@ -14,6 +14,18 @@ static struct client *clients = NULL;
 static struct client *client_head = NULL;
 static int highest_fd = 0;
 
+#define INBUF_MAX 64
+
+static void dump_list()
+{
+	struct client *p;
+	printf("head: %p\n", client_head);
+	for(p = clients; p != NULL; p = p->next)
+	{
+		printf("%p -> ", p);
+	}
+	printf("\n");
+}
 static void server_delete_client(int s)
 {
 	struct client *p, *t;
@@ -22,6 +34,8 @@ static void server_delete_client(int s)
 	if(clients->s == s)
 	{
 		t = clients;
+		if(clients == client_head)
+			client_head = clients->next;
 		clients = clients->next;
 		close(s);
 		free(t);
@@ -31,31 +45,74 @@ static void server_delete_client(int s)
 	/* General case, search entry *ahead* of us */
 	for(p = clients; p != NULL; p = p->next)
 	{
-		if(p->next && p->next->s == s)
-		{
-			t = p->next;
-			p->next = p->next->next;
-			free(t);
-		}
+		if(p->next && p->next->s != s)
+			continue;
+
+		t = p->next;
+		p->next = p->next->next;
+		free(t);
+
+		/* If p->next is null, we just removed the head */
+		if(p->next == NULL)
+			client_head = p;
 	}
+
 }
 
-static void server_handle(int s)
+static void server_read_client(struct client *p)
 {
-	char buf[512];
+	char buf[INBUF_MAX], *nl;
 	int l;
 
-	l = recv(s, buf, 512, 0);
+	l = recv(p->s, buf, INBUF_MAX, 0);
 	if(l == 0)
 	{
-		server_delete_client(s);
-		printf("Removed client %d\n", s);
+		log_inform("Removed client %d\n", p->s);
+	dump_list();
+		server_delete_client(p->s);
+	dump_list();
+
 		return;
 	}
 
-	buf[l] = 0;
+	if(!p->input)
+	{
+		p->input = malloc(INBUF_MAX);
+		p->in_filled = 0;
+		p->in_ready = 0;
+	}
 
-	printf("[%d]: %s\n", s, buf);
+	if((nl = strchr(buf, '\r')) || (nl = strchr(buf, '\n')))
+	{
+		*nl = '\0';
+		p->in_ready = 1;
+	}
+
+	if((nl = strchr(buf, '\n')))
+	{
+		p->in_ready = 1;
+	}
+
+	/* 
+	 * Fill buffer from input data.
+	 * If the buffer is filled by this action, this will discard
+	 * all new data until a newline appears in the input.
+	 * If the buffer is not filled by this action, check for 
+	 * the newline (in_ready) and chop it out of the stream.
+	 * The former case will never need the \n stripping.
+	 */
+	if((p->in_filled + l) >= INBUF_MAX)
+	{
+		memcpy(&p->input[p->in_filled], buf, INBUF_MAX - p->in_filled);
+		p->in_filled = INBUF_MAX;
+		p->input[INBUF_MAX-1] = 0;
+	} else {
+		memcpy(p->input, buf, l);
+		p->in_filled += l;
+	}
+
+	if(p->in_ready)
+		client_handle(p);
 }
 
 static void server_add_client(int s)
@@ -71,7 +128,7 @@ static void server_add_client(int s)
 		die("accept()");
 	}
 
-	printf("New client: %d...\n", new_client);
+	log_inform("New client: %d.\n", new_client);
 
 	/* First client ever */
 	if(!client_head) {
@@ -85,14 +142,14 @@ static void server_add_client(int s)
 	c->next = NULL;
 	c->s = new_client;
 	c->sock_info = malloc(len);
+	c->input = NULL;
+	c->in_filled = 0;
 	memcpy(c->sock_info, &sock_info, len);
 
 	client_head = c;
 
 	if(new_client > highest_fd)
 		highest_fd = new_client;
-
-	printf("\tRegistered.\n");
 }
 
 void server_wait_clients(int s)
@@ -106,22 +163,18 @@ void server_wait_clients(int s)
 
 	for(p = clients; p != NULL; p = p->next)
 	{
+		printf("adding %d to set\n", p->s);
 		FD_SET(p->s, &fds);
 	}
 
 	if(highest_fd == 0)
 		highest_fd = s;
 
-	res=select(highest_fd+1, &fds, NULL, NULL, NULL);
-	if(res < 0)
-	{
-		if(errno!=EINTR)
-		{
-			/* it is normal for EINTR to happen on signals, anything else is an error. */
-			perror("select()");
-		}
-		return;
-	}
+	res = select(highest_fd+1, &fds, NULL, NULL, NULL);
+
+	/* EINTR is acceptable, everything else is an error */
+	if(res < 0 && errno != EINTR)
+		die("select()");
 
 	if(FD_ISSET(s, &fds))
 	{
@@ -130,7 +183,7 @@ void server_wait_clients(int s)
 		res--;
 	}
 
-	/* use res to count the number of fds to check */
+	/* allow 'res' to bail the loop out early if we've serviced all */
 	for(p = clients; res > 0 && p != NULL; p = t)
 	{
 		/* Store p->next incase the client is removed */
@@ -139,7 +192,7 @@ void server_wait_clients(int s)
 		/* Check for client sockets with data to be read */
 		if(FD_ISSET(p->s, &fds))
 		{
-			server_handle(p->s);
+			server_read_client(p);
 			res--;
 		}
 	}

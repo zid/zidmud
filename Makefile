@@ -1,4 +1,4 @@
-CFLAGS:=-O2 -W -Wall -g
+CFLAGS:=-W -Wall -g3
 #CFLAGS+=-Werror
 
 %.o : %.c
@@ -7,10 +7,12 @@ CFLAGS:=-O2 -W -Wall -g
 % : %.o
 	$(CC) $(LDFLAGS) $(TARGET_ARCH) -o $@ $(filter %.o,$^)
 
-mud: server.o main.o log.o
+mud: server.o main.o log.o client.o
 	$(CC) $(LDFLAGS) $(TARGET_ARCH) -o $@ $(filter %.o,$^)
 
-server.o: server.c server.h
+server.o: server.c server.h client.h
+
+client.o: client.c client.h
 
 main.o: main.c
 

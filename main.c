@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include "server.h"
+#include "log.h"
 
 sig_atomic_t quit; /* set this to non-zero to quit */
 
@@ -18,7 +19,11 @@ int main(void)
 
 	port = 3333;
 
+	log_init();
+
 	printf("Starting server on port %d...\n", port);
+	log_inform("Started.\n");
+
 	s = new_server(port);
 	if(s < 0) {
 		return 1;
@@ -32,5 +37,6 @@ int main(void)
 	}
 
 	printf("Exiting.\n");
+	log_inform("Closed.\n");
 	return 0;
 }
