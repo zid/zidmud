@@ -14,18 +14,8 @@ static struct client *clients = NULL;
 static struct client *client_head = NULL;
 static int highest_fd = 0;
 
-#define INBUF_MAX 64
+#define INBUF_MAX 256
 
-static void dump_list()
-{
-	struct client *p;
-	printf("head: %p\n", client_head);
-	for(p = clients; p != NULL; p = p->next)
-	{
-		printf("%p -> ", p);
-	}
-	printf("\n");
-}
 static void server_delete_client(int s)
 {
 	struct client *p, *t;
@@ -50,6 +40,8 @@ static void server_delete_client(int s)
 
 		t = p->next;
 		p->next = p->next->next;
+		if(t->input)
+			free(t->input);
 		free(t);
 
 		/* If p->next is null, we just removed the head */
@@ -68,10 +60,7 @@ static void server_read_client(struct client *p)
 	if(l == 0)
 	{
 		log_inform("Removed client %d\n", p->s);
-	dump_list();
 		server_delete_client(p->s);
-	dump_list();
-
 		return;
 	}
 
@@ -173,9 +162,12 @@ void server_wait_clients(int s)
 	res = select(highest_fd+1, &fds, NULL, NULL, NULL);
 
 	/* EINTR is acceptable, everything else is an error */
-	if(res < 0 && errno != EINTR)
+	if(res < 0)
+	{
+		if(errno == EINTR)
+			return;
 		die("select()");
-
+	}
 	if(FD_ISSET(s, &fds))
 	{
 		/* Server socket is in the list, accept() it */
