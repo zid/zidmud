@@ -8,7 +8,8 @@ struct client {
 	int in_ready;			/* Input is ready for processing */
 
 	char *output;			/* Output buffer */
-	int out_full;			/* Flag for purging output */
+	int out_filled;			/* Output buffer fullness */
+
 	struct sockaddr *sock_info;	/* ip etc */
 	struct client *next;		/* next client */
 };	

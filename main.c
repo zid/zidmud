@@ -6,8 +6,8 @@
 sig_atomic_t quit; /* set this to non-zero to quit */
 
 /* signal handler that sets the quit flag */
-static void sh_quit(int s) {
-	quit=1;
+static void sh_quit(int sig) {
+	quit = sig;
 }
 
 int main(void)

@@ -7,7 +7,6 @@
 #include <unistd.h>
 #include "log.h"
 #include "server.h"
-#include "client.h"
 
 static int yes = 1;
 static struct client *clients = NULL;
@@ -15,6 +14,23 @@ static struct client *client_head = NULL;
 static int highest_fd = 0;
 
 #define INBUF_MAX 256
+#define OUBUF_MAX 4096
+
+void send_client(struct client *p, const char *msg)
+{
+	int i = p->out_filled;
+	int len = strlen(msg);
+
+	if(i + len >= OUBUF_MAX)
+	{
+		log_inform("%d has a full output buffer!\n", p->s);
+		return;
+	}
+
+	strcpy(&p->output[i], msg);
+
+	p->out_filled += len;
+}
 
 static void server_delete_client(int s)
 {
@@ -51,6 +67,17 @@ static void server_delete_client(int s)
 
 }
 
+static void server_write_client(struct client *p)
+{
+	int len;
+
+	len = send(p->s, p->output, p->out_filled, 0);
+	if(len == p->out_filled)
+		p->out_filled = 0;
+	else
+		server_delete_client(p->s);		
+}
+
 static void server_read_client(struct client *p)
 {
 	char buf[INBUF_MAX], *nl;
@@ -62,13 +89,6 @@ static void server_read_client(struct client *p)
 		log_inform("Removed client %d\n", p->s);
 		server_delete_client(p->s);
 		return;
-	}
-
-	if(!p->input)
-	{
-		p->input = malloc(INBUF_MAX);
-		p->in_filled = 0;
-		p->in_ready = 0;
 	}
 
 	if((nl = strchr(buf, '\r')) || (nl = strchr(buf, '\n')))
@@ -131,8 +151,11 @@ static void server_add_client(int s)
 	c->next = NULL;
 	c->s = new_client;
 	c->sock_info = malloc(len);
-	c->input = NULL;
+	c->input = malloc(INBUF_MAX);
 	c->in_filled = 0;
+	c->output = malloc(OUBUF_MAX);
+	c->out_filled = 0;
+
 	memcpy(c->sock_info, &sock_info, len);
 
 	client_head = c;
@@ -143,23 +166,30 @@ static void server_add_client(int s)
 
 void server_wait_clients(int s)
 {
-	fd_set fds;
+	fd_set in_fds, out_fds;
 	struct client *p, *t;
 	int res;
 
-	FD_ZERO(&fds);
-	FD_SET(s, &fds);
+	FD_ZERO(&in_fds);
+	FD_ZERO(&out_fds);
+
+	FD_SET(s, &in_fds);
 
 	for(p = clients; p != NULL; p = p->next)
 	{
-		printf("adding %d to set\n", p->s);
-		FD_SET(p->s, &fds);
+		/* Add every socket to the read set */
+		FD_SET(p->s, &in_fds);
+
+		/* Add clients with pending data to write set */
+		if(!p->out_filled)
+			continue;
+		FD_SET(p->s, &out_fds);
 	}
 
 	if(highest_fd == 0)
 		highest_fd = s;
 
-	res = select(highest_fd+1, &fds, NULL, NULL, NULL);
+	res = select(highest_fd+1, &in_fds, &out_fds, NULL, NULL);
 
 	/* EINTR is acceptable, everything else is an error */
 	if(res < 0)
@@ -168,7 +198,8 @@ void server_wait_clients(int s)
 			return;
 		die("select()");
 	}
-	if(FD_ISSET(s, &fds))
+
+	if(FD_ISSET(s, &in_fds))
 	{
 		/* Server socket is in the list, accept() it */
 		server_add_client(s);
@@ -182,9 +213,15 @@ void server_wait_clients(int s)
 		t = p->next;
 
 		/* Check for client sockets with data to be read */
-		if(FD_ISSET(p->s, &fds))
+		if(FD_ISSET(p->s, &in_fds))
 		{
 			server_read_client(p);
+			res--;
+		}
+		/* Check clients with pending data for writeability */
+		if(FD_ISSET(p->s, &out_fds))
+		{
+			server_write_client(p);
 			res--;
 		}
 	}
