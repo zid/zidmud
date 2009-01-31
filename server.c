@@ -32,6 +32,21 @@ void send_client(struct client *p, const char *msg)
 	p->out_filled += len;
 }
 
+static void free_client(struct client *p)
+{
+	if(p->input)
+		free(p->input);
+
+	if(p->output)
+		free(p->output);
+
+	if(p->sock_info)
+		free(p->sock_info);
+
+	close(p->s);
+	free(p);
+}
+
 static void server_delete_client(int s)
 {
 	struct client *p, *t;
@@ -43,8 +58,7 @@ static void server_delete_client(int s)
 		if(clients == client_head)
 			client_head = clients->next;
 		clients = clients->next;
-		close(s);
-		free(t);
+		free_client(t);
 		return;
 	}
 
@@ -56,9 +70,8 @@ static void server_delete_client(int s)
 
 		t = p->next;
 		p->next = p->next->next;
-		if(t->input)
-			free(t->input);
-		free(t);
+		
+		free_client(t);
 
 		/* If p->next is null, we just removed the head */
 		if(p->next == NULL)
