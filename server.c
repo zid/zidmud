@@ -65,7 +65,7 @@ static void server_delete_client(int s)
 	/* General case, search entry *ahead* of us */
 	for(p = clients; p != NULL; p = p->next)
 	{
-		if(p->next && p->next->s != s)
+		if(!p->next || p->next->s != s)
 			continue;
 
 		t = p->next;
@@ -230,6 +230,8 @@ void server_wait_clients(int s)
 		{
 			server_read_client(p);
 			res--;
+			/* p might be dead now, service writes later */
+			continue;
 		}
 		/* Check clients with pending data for writeability */
 		if(FD_ISSET(p->s, &out_fds))
