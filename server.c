@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <string.h>
@@ -147,6 +148,10 @@ static void server_add_client(int s)
 	new_client = accept(s, (struct sockaddr*)&sock_info, &len);
 
 	if(new_client < 0) {
+		if(errno == EAGAIN) {
+			log_warn("accept: %s\n", strerror(errno));
+			return;
+		}
 		die("accept()");
 	}
 
@@ -307,6 +312,9 @@ static void listen_on(int s)
 	if(r == -1)
 		die("Unable to listen on bound socket.\n");
 
+	r = fcntl(s, F_SETFL, O_NONBLOCK);
+	if(r == -1)
+		die("Unable to set non-blocking on bound socket.\n");
 }
 
 int new_server(int port)
